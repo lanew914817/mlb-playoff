@@ -231,11 +231,6 @@ function resetSeries(sid) {
   });
 }
 
-function scoreLabel(s) {
-  const r = recordOf(s.id);
-  return r.a || r.h ? `${r.a}:${r.h}` : "";
-}
-
 const imgCache = {};
 function cachedImg(src) {
   if (!imgCache[src]) {
@@ -280,11 +275,12 @@ function goldRule(ctx, cx, y, half) {
   ctx.stroke();
 }
 
-function pill(ctx, x, y, text) {
-  ctx.font = `700 13px ${SERIF}`;
-  const w = Math.max(38, ctx.measureText(text).width + 18), h = 20;
+// Series record in a small framed box. Vertical (top team over bottom team) on the
+// spines; horizontal for W_1, whose teams sit left and right.
+function recordBox(ctx, x, y, top, bottom, vertical) {
+  const w = vertical ? 22 : 44, h = vertical ? 52 : 22;
   ctx.beginPath();
-  ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, 7);
   ctx.fillStyle = "rgba(4, 16, 40, .92)";
   ctx.fill();
   ctx.lineWidth = 1.2;
@@ -292,7 +288,15 @@ function pill(ctx, x, y, text) {
   ctx.stroke();
   ctx.fillStyle = CREAM;
   ctx.textAlign = "center";
-  ctx.fillText(text, x, y + 0.5);
+  ctx.font = `700 14px ${SERIF}`;
+  if (vertical) {
+    ctx.fillText(String(top), x, y - 15);
+    ctx.fillText(String(bottom), x, y + 16);
+    ctx.font = `700 12px ${SERIF}`;
+    ctx.fillText(":", x, y);
+  } else {
+    ctx.fillText(`${top}:${bottom}`, x, y + 0.5);
+  }
 }
 
 // Draws the whole poster in model units; used for both screen and export.
@@ -378,10 +382,10 @@ function drawPoster(ctx, width) {
   }
 
   for (const s of series) {
-    const text = scoreLabel(s);
-    if (!text) continue;
+    const r = recordOf(s.id);
+    if (!r.a && !r.h) continue;
     const p = scoreSpot(s.id);
-    pill(ctx, p.x, p.y, text);
+    recordBox(ctx, p.x, p.y, r.a, r.h, s.id !== "W_1");
   }
 
   ctx.restore();
