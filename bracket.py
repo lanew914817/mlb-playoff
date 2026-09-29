@@ -1,4 +1,5 @@
-"""2026 MLB postseason bracket: teams, path, wins, Taiwan time."""
+"""2026 MLB postseason bracket: teams, path, MLB schedule, Taiwan time.
+Win/advance rules live in static/rules.js (tested by check_rules.js)."""
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -22,9 +23,6 @@ TEAMS = {
 PLACEHOLDER_IDS = {
     2710, 2711, 5513, 5517, 5521, 5525, 5528, 5529, 5532, 5533,
 }
-
-WINS_NEEDED = {"F": 2, "D": 3, "L": 4, "W": 4}
-GAMES_IN_SERIES = {"F": 3, "D": 5, "L": 7, "W": 7}
 
 SERIES = [
     {"id": "F_1", "gameType": "F", "zh": "美聯外卡", "league": "AL",
@@ -95,10 +93,6 @@ FALLBACK_GAMES = [
 ]
 
 
-def wins_needed(game_type: str) -> int:
-    return WINS_NEEDED[game_type]
-
-
 def taiwan_clock(iso: str) -> str:
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(TW)
     return dt.strftime("%Y-%m-%d %H:%M")
@@ -106,76 +100,6 @@ def taiwan_clock(iso: str) -> str:
 
 def is_real_team(tid) -> bool:
     return tid in TEAMS
-
-
-def _score_pair(game):
-    a, h = game.get("awayScore"), game.get("homeScore")
-    if a is None or h is None or a == "" or h == "":
-        return None
-    return int(a), int(h)
-
-
-def series_wins(games, series_id):
-    wins = {}
-    for g in games:
-        if g.get("seriesId") != series_id:
-            continue
-        pair = _score_pair(g)
-        if not pair:
-            continue
-        away, home = pair
-        if away == home:
-            continue
-        winner = g["home"] if home > away else g["away"]
-        if not is_real_team(winner):
-            continue
-        wins[winner] = wins.get(winner, 0) + 1
-    return wins
-
-
-def series_winner(games, series_id, needed):
-    wins = series_wins(games, series_id)
-    for tid, n in wins.items():
-        if n >= needed:
-            return tid
-    return None
-
-
-def _sides(series, picks):
-    src = series.get("from")
-    if isinstance(src, str):
-        return picks.get(src), series["home"]
-    if isinstance(src, list):
-        return picks.get(src[0]), picks.get(src[1])
-    return series["away"], series["home"]
-
-
-def record_winner(state, series, picks):
-    """Clicked wins (state["wins"]) override box-score counts; only teams in the series count."""
-    away, home = _sides(series, picks)
-    needed = wins_needed(series["gameType"])
-    clicked = (state.get("wins") or {}).get(series["id"])
-    if clicked is None:
-        counts = series_wins(state.get("games") or [], series["id"])
-    else:
-        counts = {int(k): int(v) for k, v in clicked.items()}
-    if not (is_real_team(away) and is_real_team(home)):
-        return None
-    for tid in (away, home):
-        if counts.get(tid, 0) >= needed:
-            return tid
-    return None
-
-
-def apply_winners(state):
-    """Recompute picks (series winners) from records, in bracket order."""
-    picks = {}
-    for s in SERIES:
-        w = record_winner(state, s, picks)
-        if w is not None:
-            picks[s["id"]] = w
-    state["picks"] = picks
-    return state
 
 
 def empty_game(g):
@@ -192,7 +116,7 @@ def empty_game(g):
 
 def empty_state(games=None):
     src = games if games is not None else FALLBACK_GAMES
-    return {"picks": {}, "games": [empty_game(g) for g in src]}
+    return {"wins": {}, "games": [empty_game(g) for g in src]}
 
 
 def parse_mlb(payload):

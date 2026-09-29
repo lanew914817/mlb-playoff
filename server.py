@@ -15,7 +15,6 @@ from urllib.request import Request, urlopen
 from bracket import (
     SERIES,
     TEAMS,
-    apply_winners,
     empty_state,
     merge_games,
     parse_mlb,
@@ -27,7 +26,7 @@ DATA = ROOT / "data"
 LOGOS = ROOT / "logos"
 STATIC = ROOT / "static"
 PORT = 8765
-HOST = os.environ.get("HOST", "0.0.0.0")
+HOST = os.environ.get("HOST", "127.0.0.1")
 LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 PROXY_HEADERS = ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For", "Forwarded")
 MLB_URL = "https://statsapi.mlb.com/api/v1/schedule/postseason/series?season=2026&sportId=1"
@@ -100,7 +99,6 @@ def load_state(mode: str):
 
 
 def save_state(mode: str, state):
-    apply_winners(state)
     path = DATA / ("prediction.json" if mode == "prediction" else "actual.json")
     _write_json(path, state)
     return state
@@ -111,11 +109,9 @@ def sync_actual():
     _write_json(DATA / "schedule.json", incoming)
     actual = load_state("actual")
     actual["games"] = merge_games(actual.get("games") or [], incoming, respect_manual=True)
-    apply_winners(actual)
     _write_json(DATA / "actual.json", actual)
     pred = load_state("prediction")
     pred["games"] = merge_games(pred.get("games") or [], incoming, respect_manual=False)
-    apply_winners(pred)
     _write_json(DATA / "prediction.json", pred)
     return actual
 
@@ -126,7 +122,7 @@ def payload(mode: str, can_edit: bool):
         "canEdit": can_edit,
         "teams": TEAMS,
         "series": SERIES,
-        "state": apply_winners(load_state(mode)),
+        "state": load_state(mode),
         "schedule": load_schedule(),
     }
 

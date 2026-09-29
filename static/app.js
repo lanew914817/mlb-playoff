@@ -1,9 +1,27 @@
-const WINS = { F: 2, D: 3, L: 4, W: 4 };
-
 let mode = "prediction";
 let teams = {};
 let series = [];
 let state = { wins: {}, games: [] };
+// Records of the shown bracket, and of the real games (for 猜中 marks); see rules.js.
+let bracket = {};
+let actualBracket = {};
+const HITS_KEY = "mlb2026-show-hits";
+let showHits = true;
+try {
+  showHits = localStorage.getItem(HITS_KEY) !== "0";
+} catch {}
+
+// 猜中 per series the real games have decided (prediction mode only).
+function hits() {
+  return mode === "prediction" ? compareBrackets(bracket, actualBracket) : {};
+}
+
+// The slot a series winner moves into (the champion slot for the World Series).
+function advancedSlot(sid, find = slotOf) {
+  if (sid === "W_1") return find("W_1", "winner");
+  const t = series.find((x) => x.from === sid || (Array.isArray(x.from) && x.from.includes(sid)));
+  return find(t.id, t.from === sid || t.from[0] === sid ? "away" : "home");
+}
 // Owner (this machine) saves to the server; LAN visitors keep their own prediction in the browser.
 let canEdit = false;
 const LOCAL_KEY = "mlb2026-prediction-wins";
@@ -34,48 +52,21 @@ function seriesBy(id) {
   return series.find((s) => s.id === id);
 }
 
-function gameScoreWinner(g) {
-  if (!g || g.awayScore == null || g.homeScore == null || g.awayScore === "" || g.homeScore === "") return null;
-  const a = +g.awayScore, h = +g.homeScore;
-  if (a === h) return null;
-  return h > a ? g.home : g.away;
+function recompute() {
+  bracket = computeBracket(series, state, real);
 }
 
-// Series record: clicked wins (state.wins) override box-score counts.
-// Only teams currently in the series count.
 function recordOf(sid) {
-  const s = seriesBy(sid);
-  const { away, home } = sides(s);
-  const need = WINS[s.gameType];
-  let src = (state.wins || {})[sid];
-  const manual = src != null;
-  if (!manual) {
-    src = {};
-    for (const g of state.games) {
-      if (g.seriesId !== sid) continue;
-      const w = gameScoreWinner(g);
-      if (w != null) src[w] = (src[w] || 0) + 1;
-    }
-  }
-  const ready = !!(real(away) && real(home));
-  const a = ready ? Math.min(need, +src[away] || 0) : 0;
-  const h = ready ? Math.min(need, +src[home] || 0) : 0;
-  const winner = a >= need ? away : h >= need ? home : null;
-  return { away, home, need, a, h, winner, manual, ready };
+  return bracket[sid];
 }
 
 function pickOf(sid) {
-  return recordOf(sid).winner;
+  return bracket[sid].winner;
 }
 
 function sides(s) {
-  let away = s.away, home = s.home;
-  if (typeof s.from === "string") away = pickOf(s.from);
-  else if (Array.isArray(s.from)) {
-    away = pickOf(s.from[0]);
-    home = pickOf(s.from[1]);
-  }
-  return { away, home };
+  const r = bracket[s.id];
+  return { away: r.away, home: r.home };
 }
 
 function logoSrc(id) {
@@ -188,47 +179,31 @@ function scoreSpot(sid) {
 }
 
 // Changing a series' winner wipes every later round on its path.
-function clearAfter(sid) {
-  for (let nx = seriesBy(sid).next; nx; nx = seriesBy(nx).next) {
-    if (state.wins) delete state.wins[nx];
-  }
-}
-
 function commit(sid, mutate) {
   const before = pickOf(sid);
+  state.wins = state.wins || {};
   mutate();
-  const after = pickOf(sid);
-  if (before != null && after !== before) clearAfter(sid);
+  recompute();
+  // A changed winner wipes every later round on its path; then drop records of unset series.
+  if (before != null && pickOf(sid) !== before) {
+    for (const id of laterRounds(series, sid)) delete state.wins[id];
+    recompute();
+  }
   for (const s of series) {
-    if (state.wins && state.wins[s.id] && !recordOf(s.id).ready) delete state.wins[s.id];
+    if (state.wins[s.id] && !recordOf(s.id).ready) delete state.wins[s.id];
   }
   persist();
   render();
 }
 
-// +1 / −1 win for teamId in series sid, capped so the record stays legal.
 function bump(sid, teamId, delta) {
-  const r = recordOf(sid);
-  if (!editable() || !r.ready || (teamId !== r.away && teamId !== r.home)) return;
-  const mine = teamId === r.away ? r.a : r.h;
-  const theirs = teamId === r.away ? r.h : r.a;
-  const n = mine + delta;
-  if (n < 0 || n > r.need) return;
-  if (delta > 0 && theirs >= r.need) return;
-  commit(sid, () => {
-    state.wins = state.wins || {};
-    const rec = {};
-    if (real(r.away)) rec[r.away] = r.a;
-    if (real(r.home)) rec[r.home] = r.h;
-    rec[teamId] = n;
-    state.wins[sid] = rec;
-  });
+  if (!editable()) return;
+  const next = bumpRecord(recordOf(sid), teamId, delta);
+  if (next) commit(sid, () => { state.wins[sid] = next; });
 }
 
 function resetSeries(sid) {
-  commit(sid, () => {
-    if (state.wins) delete state.wins[sid];
-  });
+  commit(sid, () => { delete state.wins[sid]; });
 }
 
 const imgCache = {};
@@ -262,13 +237,13 @@ function spacedText(ctx, text, x, y, spacing) {
   return total;
 }
 
-function goldRule(ctx, cx, y, half) {
+function goldRule(ctx, cx, y, half, width = 0.9) {
   const g = ctx.createLinearGradient(cx - half, 0, cx + half, 0);
   g.addColorStop(0, "rgba(230,197,106,0)");
   g.addColorStop(0.5, GOLD);
   g.addColorStop(1, "rgba(230,197,106,0)");
   ctx.strokeStyle = g;
-  ctx.lineWidth = 0.9;
+  ctx.lineWidth = width;
   ctx.beginPath();
   ctx.moveTo(cx - half, y);
   ctx.lineTo(cx + half, y);
@@ -350,18 +325,7 @@ function drawPoster(ctx, width) {
   for (const slot of SLOTS) {
     const seed = slotSeed(slot);
     if (seed == null || !real(slotTeam(slot))) continue;
-    const bx = slot.x + R * 0.74, by = slot.y - R * 0.74;
-    ctx.beginPath();
-    ctx.arc(bx, by, 10, 0, Math.PI * 2);
-    ctx.fillStyle = SEED_RED;
-    ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = "#fff";
-    ctx.stroke();
-    ctx.fillStyle = "#fff";
-    ctx.font = `800 12.5px ${SANS}`;
-    ctx.textAlign = "center";
-    ctx.fillText(String(seed), bx, by + 0.6);
+    drawSeed(ctx, slot.x + R * 0.74, slot.y - R * 0.74, seed);
   }
 
   for (const [text, sid, side] of LABELS) {
@@ -388,7 +352,84 @@ function drawPoster(ctx, width) {
     recordBox(ctx, p.x, p.y, r.a, r.h, s.id !== "W_1");
   }
 
+  if (showHits) drawHits(ctx);
+
   ctx.restore();
+}
+
+// Red seed badge (poster units; scale the context for other layouts).
+function drawSeed(ctx, x, y, seed) {
+  ctx.beginPath();
+  ctx.arc(x, y, 10, 0, Math.PI * 2);
+  ctx.fillStyle = SEED_RED;
+  ctx.fill();
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "#fff";
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.font = `800 12.5px ${SANS}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(seed), x, y + 0.6);
+}
+
+// Gold ✓ (guessed right) or grey ✗ badge.
+function drawMark(ctx, x, y, ok) {
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.fillStyle = ok ? GOLD : "#5b6475";
+  ctx.fill();
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "#fff";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = ok ? "#041e42" : "#fff";
+  if (ok) {
+    ctx.moveTo(x - 4, y + 0.5);
+    ctx.lineTo(x - 1, y + 3.5);
+    ctx.lineTo(x + 4.5, y - 3);
+  } else {
+    ctx.moveTo(x - 3.5, y - 3.5);
+    ctx.lineTo(x + 3.5, y + 3.5);
+    ctx.moveTo(x + 3.5, y - 3.5);
+    ctx.lineTo(x - 3.5, y + 3.5);
+  }
+  ctx.stroke();
+}
+
+// Draws fn in a context scaled by k around (x, y), so poster-sized helpers fit other layouts.
+function scaledAt(ctx, x, y, k, fn) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(k, k);
+  fn();
+  ctx.restore();
+}
+
+// ✓ / ✗ on the slot each predicted winner moved into, plus the 猜中 count.
+function drawHits(ctx) {
+  const h = hits();
+  const ids = Object.keys(h);
+  if (!ids.length) return;
+  for (const sid of ids) {
+    if (pickOf(sid) == null) continue;
+    const slot = advancedSlot(sid);
+    const r = rOf(slot);
+    drawMark(ctx, slot.x + r * 0.74, slot.y + r * 0.74, h[sid]);
+  }
+  const got = ids.filter((sid) => h[sid]).length;
+  const y = VH - 16;
+  ctx.font = `700 10px ${SERIF}`;
+  ctx.save();
+  ctx.shadowColor = "rgba(2, 8, 20, .95)";
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = CREAM;
+  const w = spacedText(ctx, `CORRECT PICKS  ${got} / ${ids.length}`, VW / 2, y, 1.8);
+  ctx.restore();
+  goldRule(ctx, VW / 2, y - 9, w / 2 + 8);
 }
 
 function paintPoster() {
@@ -489,6 +530,8 @@ function seriesRow(s) {
   const row = el("div", "rec" + (r.winner != null ? " done" : ""));
   const name = el("span", "rname", s.zh);
   name.appendChild(el("small", "", FORMAT[s.gameType]));
+  const hit = hits()[s.id];
+  if (hit != null) name.appendChild(el("span", "tag " + (hit ? "hit" : "miss"), hit ? "猜中" : "沒猜中"));
   const left = teamLabel(r.away);
   if (r.winner != null && r.winner === r.away) left.classList.add("won");
   const right = teamLabel(r.home);
@@ -507,7 +550,10 @@ function seriesRow(s) {
 function renderEditor() {
   const root = $("editor");
   root.innerHTML = "";
-  root.appendChild(el("h2", "", "戰績"));
+  const head = el("h2", "", "戰績");
+  const h = Object.values(hits());
+  if (h.length) head.appendChild(el("span", "score-sum", `猜中 ${h.filter(Boolean).length} / ${h.length}`));
+  root.appendChild(head);
   root.appendChild(el("p", "sub", mode === "prediction"
     ? "在海報上點隊徽＝那隊在該系列 +1 勝；右鍵或長按＝−1 勝。贏到門檻自動晉級，前面輪次一改，後面輪次自動清空。"
       + (canEdit ? "" : "你的預測只存在這個瀏覽器。")
@@ -565,6 +611,9 @@ function renderSchedule() {
 }
 
 function render() {
+  recompute();
+  $("hits-toggle").hidden = !Object.keys(hits()).length;
+  $("chk-hits").checked = showHits;
   $("btn-pred").classList.toggle("on", mode === "prediction");
   $("btn-actual").classList.toggle("on", mode === "actual");
   $("btn-sync").hidden = mode !== "actual" || !canEdit;
@@ -599,33 +648,37 @@ async function load(nextMode) {
   series = data.series;
   canEdit = !!data.canEdit;
   state = data.state;
+  delete state.picks;
   if (!canEdit && mode === "prediction") state = { ...data.state, wins: readLocalWins() };
+  actualBracket = {};
+  if (mode === "prediction") {
+    const act = await (await fetch("/api/state?mode=actual")).json();
+    actualBracket = computeBracket(series, act.state, real);
+  }
   render();
 }
 
-// mlb-2026-預測-20260929-1430.png (viewer's local time)
-function exportName(d) {
+// mlb-2026-預測-20260929-1430.png / mlb-2026-預測-限動-20260929-1430.png (viewer's local time)
+function exportName(d, kind = "") {
   const p2 = (n) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
-  return `mlb-2026-${mode === "actual" ? "實際" : "預測"}-${stamp}.png`;
+  return `mlb-2026-${mode === "actual" ? "實際" : "預測"}${kind ? "-" + kind : ""}-${stamp}.png`;
 }
 
-async function exportPng() {
+async function assetsReady() {
   await document.fonts.load(`700 20px ${SERIF}`).catch(() => {});
   await document.fonts.ready;
   const srcs = [BG_SRC, ...SLOTS.map(slotTeam).filter(real).map(logoSrc)];
   await Promise.all(srcs.map((s) => cachedImg(s).decode().catch(() => {})));
-  const canvas = document.createElement("canvas");
-  canvas.width = 2560;
-  canvas.height = Math.round(2560 * VH / VW);
-  drawPoster(canvas.getContext("2d"), canvas.width);
+}
 
-  await new Promise((res, rej) => {
+function download(canvas, name) {
+  return new Promise((res, rej) => {
     canvas.toBlob((blob) => {
       if (!blob) return rej(new Error("toBlob failed"));
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = exportName(new Date());
+      a.download = name;
       a.click();
       URL.revokeObjectURL(a.href);
       res();
@@ -633,18 +686,45 @@ async function exportPng() {
   });
 }
 
+async function exportPng() {
+  await assetsReady();
+  const canvas = document.createElement("canvas");
+  canvas.width = 2560;
+  canvas.height = Math.round(2560 * VH / VW);
+  drawPoster(canvas.getContext("2d"), canvas.width);
+  await download(canvas, exportName(new Date()));
+}
+
+async function exportStory() {
+  await assetsReady();
+  const canvas = document.createElement("canvas");
+  canvas.width = STORY_W;
+  canvas.height = STORY_H;
+  drawStory(canvas.getContext("2d"));
+  await download(canvas, exportName(new Date(), "限動"));
+}
+
 $("btn-pred").onclick = () => load("prediction");
-$("btn-actual").onclick = () => load("actual");
-$("btn-export").onclick = async () => {
-  $("btn-export").disabled = true;
+$("chk-hits").onchange = () => {
+  showHits = $("chk-hits").checked;
   try {
-    await exportPng();
-  } catch (e) {
-    alert("輸出失敗：" + e);
-  } finally {
-    $("btn-export").disabled = false;
-  }
+    localStorage.setItem(HITS_KEY, showHits ? "1" : "0");
+  } catch {}
+  paintPoster();
 };
+$("btn-actual").onclick = () => load("actual");
+for (const [id, run] of [["btn-export", exportPng], ["btn-story", exportStory]]) {
+  $(id).onclick = async () => {
+    $(id).disabled = true;
+    try {
+      await run();
+    } catch (e) {
+      alert("輸出失敗：" + e);
+    } finally {
+      $(id).disabled = false;
+    }
+  };
+}
 $("btn-sync").onclick = async () => {
   $("btn-sync").disabled = true;
   try {
