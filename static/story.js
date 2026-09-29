@@ -145,6 +145,7 @@ function drawStory(ctx) {
   for (const slot of STORY_SLOTS) {
     const teamId = slotTeam(slot);
     const hot = real(teamId) && pickOf(slot.id) === teamId;
+    const out = eliminated(slot, teamId);
     const r = storyR(slot);
     ctx.beginPath();
     ctx.arc(slot.x, slot.y, r, 0, Math.PI * 2);
@@ -158,6 +159,7 @@ function drawStory(ctx) {
         ctx.beginPath();
         ctx.arc(slot.x, slot.y, d / 2, 0, Math.PI * 2);
         ctx.clip();
+        if (out) ctx.globalAlpha = DIM_ALPHA;
         ctx.drawImage(img, slot.x - d / 2, slot.y - d / 2, d, d);
         ctx.restore();
       }
@@ -165,7 +167,7 @@ function drawStory(ctx) {
     ctx.beginPath();
     ctx.arc(slot.x, slot.y, r, 0, Math.PI * 2);
     ctx.lineWidth = slot.side === "winner" ? 5.5 : hot ? 5 : 3.4;
-    ctx.strokeStyle = hot || slot.side === "winner" ? GOLD_HI : GOLD;
+    ctx.strokeStyle = hot || slot.side === "winner" ? GOLD_HI : out ? GOLD_DIM : GOLD;
     ctx.stroke();
   }
 

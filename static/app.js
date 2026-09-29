@@ -162,6 +162,15 @@ function slotTeam(slot) {
   return pair[slot.side];
 }
 
+// A team that lost this series (World Series finalists stay bright: both are league champions).
+function eliminated(slot, teamId) {
+  if (slot.id === "W_1" || !real(teamId)) return false;
+  const w = pickOf(slot.id);
+  return w != null && w !== teamId;
+}
+
+const DIM_ALPHA = 0.38, GOLD_DIM = "rgba(230, 197, 106, .45)";
+
 // Seed only where a team first enters the bracket.
 function slotSeed(slot) {
   if (slot.side === "winner") return null;
@@ -298,6 +307,7 @@ function drawPoster(ctx, width) {
   for (const slot of SLOTS) {
     const teamId = slotTeam(slot);
     const hot = real(teamId) && pickOf(slot.id) === teamId;
+    const out = eliminated(slot, teamId);
     ctx.beginPath();
     const r = rOf(slot);
     ctx.arc(slot.x, slot.y, r, 0, Math.PI * 2);
@@ -311,6 +321,7 @@ function drawPoster(ctx, width) {
         ctx.beginPath();
         ctx.arc(slot.x, slot.y, d / 2, 0, Math.PI * 2);
         ctx.clip();
+        if (out) ctx.globalAlpha = DIM_ALPHA;
         ctx.drawImage(img, slot.x - d / 2, slot.y - d / 2, d, d);
         ctx.restore();
       }
@@ -318,7 +329,7 @@ function drawPoster(ctx, width) {
     ctx.beginPath();
     ctx.arc(slot.x, slot.y, r, 0, Math.PI * 2);
     ctx.lineWidth = slot.side === "winner" ? 3.6 : hot ? 3.4 : 2.4;
-    ctx.strokeStyle = hot ? GOLD_HI : GOLD;
+    ctx.strokeStyle = hot ? GOLD_HI : out ? GOLD_DIM : GOLD;
     ctx.stroke();
   }
 
