@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2026 季後賽</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css?v=9">
+</head>
+<body>
+  <header class="bar">
+    <div class="modes" role="tablist">
+      <button type="button" id="btn-pred" class="on">預測</button>
+      <button type="button" id="btn-actual">實際</button>
+    </div>
+    <p class="hint" id="hint"></p>
+    <button type="button" id="btn-sync" hidden>從 MLB 更新</button>
+  </header>
+  <div id="poster"></div>
+  <div class="export-row">
+    <button type="button" id="btn-export">下載圖片</button>
+  </div>
+  <section id="editor"></section>
+  <section id="schedule"></section>
+  <script src="/static/app.js?v=10"></script>
+</body>
+</html>

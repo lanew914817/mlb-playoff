@@ -1,0 +1,104 @@
+:root {
+  --navy: #041e42;
+  --gold: #bfa14a;
+  --bg: #e7e9ee;
+  --poster: #eef0f4;
+  --muted: #8b909a;
+  --line: #c5c9d2;
+  --card: #fff;
+  --ink: #1a1d24;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #f4f5f7; color: var(--ink);
+  font-family: "PingFang TC", "Noto Sans TC", "Heiti TC", sans-serif; }
+.bar {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--navy); color: #fff;
+}
+.modes { display: flex; background: #0a2d5c; border-radius: 999px; padding: 3px; }
+.modes button, .bar > button {
+  border: 0; cursor: pointer; font: inherit; padding: 8px 16px; border-radius: 999px;
+}
+.modes button { background: transparent; color: #c9d4e6; }
+.modes button.on { background: #fff; color: var(--navy); font-weight: 600; }
+.bar > button { background: var(--gold); color: var(--navy); font-weight: 700; }
+#btn-sync { background: #1c4e8a; color: #fff; }
+.hint { margin: 0 auto 0 8px; font-size: 13px; color: #c9d4e6; }
+
+#poster {
+  position: relative;
+  width: min(1040px, calc(100% - 32px));
+  aspect-ratio: 1280 / 980;
+  margin: 20px auto 0;
+  line-height: 0;
+  background: #06122a;
+}
+#poster canvas { width: 100%; height: 100%; display: block; }
+.slot {
+  position: absolute; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  padding: 0; border: 0; background: transparent; border-radius: 50%;
+}
+.slot {
+  cursor: pointer; touch-action: manipulation;
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+}
+.slot:disabled { cursor: default; }
+.slot:hover:not(:disabled) { box-shadow: 0 0 0 3px rgba(255, 231, 163, .55); }
+.slot:focus-visible { outline: 2px solid #ffe7a3; outline-offset: 2px; }
+
+.export-row { display: flex; justify-content: center; margin: 18px auto 0; }
+#btn-export {
+  border: 0; cursor: pointer; font: inherit; font-size: 17px; font-weight: 700;
+  padding: 13px 44px; border-radius: 999px;
+  background: linear-gradient(180deg, #f1d88a, #bfa14a); color: var(--navy);
+  box-shadow: 0 4px 14px rgba(4, 30, 66, .22);
+}
+#btn-export:hover { filter: brightness(1.05); }
+#btn-export:disabled { opacity: .6; cursor: progress; }
+
+#editor, #schedule {
+  width: min(1280px, calc(100% - 32px));
+  margin: 32px auto 24px;
+  background: var(--card); border: 1px solid #e2e5eb; padding: 20px 24px;
+}
+#editor h2, #schedule h2 { margin: 0 0 6px; font-size: 18px; color: var(--navy); }
+#editor .sub { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.round-sec h3 { margin: 18px 0 10px; font-size: 14px; color: var(--navy); letter-spacing: .08em; }
+.rec {
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: 110px minmax(0, 1fr) auto minmax(0, 1fr) 76px;
+  padding: 8px 12px; margin: 0 0 6px; border: 1px solid #eceef2; border-radius: 8px;
+  background: #fafbfc; font-size: 14px;
+}
+.rec.done { border-color: #e6d49a; background: #fffdf6; }
+.rec .rname { font-weight: 700; color: var(--navy); }
+.rec .rname small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.rec > .tm { justify-self: end; }
+.rec > .tm:last-of-type { justify-self: start; flex-direction: row-reverse; }
+.rec .rscore { white-space: nowrap; font-size: 20px; font-weight: 800; color: var(--navy); letter-spacing: .06em; }
+.rec .undo {
+  grid-column: 5; justify-self: end;
+  border: 1px solid var(--line); background: #fff; font: inherit; font-size: 12px;
+  padding: 3px 10px; border-radius: 6px; cursor: pointer;
+}
+.tm { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.tm .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm img { width: 26px; height: 26px; border-radius: 50%; flex: none; }
+.tm .seed {
+  flex: none; width: 17px; height: 17px; border-radius: 50%; background: #d50032; color: #fff;
+  font-size: 10.5px; font-weight: 800; display: inline-grid; place-items: center;
+}
+.tm.won .nm { font-weight: 700; color: #7a5d10; }
+.muted { color: var(--muted); }
+.day { margin: 0 0 10px; }
+.day h3 { margin: 16px 0 6px; font-size: 15px; color: var(--navy); }
+.day li { list-style: none; padding: 4px 0; }
+.day ul { margin: 0; padding: 0; }
+
+@media (max-width: 600px) {
+  #editor, #schedule { padding: 16px 12px; }
+  .rec { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px 8px; }
+  .rec .rname { grid-column: 1 / -1; }
+  .rec .undo { grid-column: 1 / -1; justify-self: center; }
+}
