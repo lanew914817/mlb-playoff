@@ -80,6 +80,7 @@ const VW = 1000, VH = 1000 * 980 / 1280;
 const R = 32, R_CHAMP = 46, SPINE = R + 22;
 const rOf = (slot) => (slot.side === "winner" ? R_CHAMP : R);
 const BG_SRC = "/static/poster-bg-wide.jpg?v=9";
+const MLB_SRC = "/static/mlb-logo.svg?v=1";
 const SLOTS = [
   { id: "F_1", side: "away", x: 72, y: 266 },
   { id: "F_1", side: "home", x: 72, y: 396 },
@@ -304,6 +305,7 @@ function drawPoster(ctx, width) {
   const bg = cachedImg(BG_SRC);
   if (ready(bg)) ctx.drawImage(bg, 0, 0, VW, VH);
   else { ctx.fillStyle = "#06122a"; ctx.fillRect(0, 0, VW, VH); }
+  drawMlbLogo(ctx, 24, 22, 72);
 
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = 2.4;
@@ -377,6 +379,12 @@ function drawPoster(ctx, width) {
   if (showHits) drawHits(ctx);
 
   ctx.restore();
+}
+
+// The MLB logo, w wide, top-left corner at (x, y).
+function drawMlbLogo(ctx, x, y, w) {
+  const img = cachedImg(MLB_SRC);
+  if (ready(img)) ctx.drawImage(img, x, y, w, w * 72 / 128.15);
 }
 
 // Red seed badge (poster units; scale the context for other layouts).
@@ -801,7 +809,7 @@ function exportName(d, kind = "", part = "", label = mode === "actual" ? "實際
 async function assetsReady() {
   await document.fonts.load(`700 20px ${SERIF}`).catch(() => {});
   await document.fonts.ready;
-  const srcs = [BG_SRC, ...SLOTS.map(slotTeam).filter(real).map(logoSrc)];
+  const srcs = [BG_SRC, MLB_SRC, ...SLOTS.map(slotTeam).filter(real).map(logoSrc)];
   await Promise.all(srcs.map((s) => whenLoaded(cachedImg(s))));
 }
 

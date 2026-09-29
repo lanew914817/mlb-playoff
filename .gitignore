@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 data/prediction.json
 data/actual.json
+logos/

@@ -119,6 +119,7 @@ function drawStory(ctx) {
   if (ready(plate)) {
     storyBackground(ctx, plate);
     storyCrop(ctx, plate, "title", S_CX, 285, 140);
+    drawMlbLogo(ctx, S_CX - 55, 146, 110);
     storyCrop(ctx, plate, "wcL", S_CX, S_AL.wc, 30);
     storyCrop(ctx, plate, "alds", S_CX, S_AL.ds, 40);
     storyCrop(ctx, plate, "alcs", S_CX, S_AL.cs - 6, 40);

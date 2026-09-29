@@ -270,6 +270,7 @@ function drawSchedulePage(ctx, page, subtitle, index, total, when) {
   if (ready(plate)) {
     storyBackground(ctx, plate, H);
     storyCrop(ctx, plate, "title", SCH_W / 2, 118, 118);
+    drawMlbLogo(ctx, SCH_X, 40, 96);
   } else {
     ctx.fillStyle = "#06122a";
     ctx.fillRect(0, 0, SCH_W, H);

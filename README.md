@@ -59,7 +59,7 @@ HOST=0.0.0.0 python3 server.py
 | `data/schedule.json` | 賽程（含開賽 UTC） |
 | `data/prediction.json` | 你的預測勝場（不進 git，第一次啟動自動建立） |
 | `data/actual.json` | 實際比分（不進 git）；手動改過的系列在同步時會保留 |
-| `logos/` | 啟動時從 MLB 抓的隊徽，已有的不會重抓 |
+| `logos/` | 啟動時從 MLB 抓的隊徽（不進 git，第一次啟動要有網路），已有的不會重抓 |
 | `check_rules.js` | 晉級規則的檢查（需要 Node） |
 | `check_advance.py` | 台灣時間與同步保留手改比分的檢查 |
 
