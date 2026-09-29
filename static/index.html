@@ -7,27 +7,39 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
-  <link rel="stylesheet" href="/static/style.css?v=14">
+  <link rel="stylesheet" href="/static/style.css?v=15">
 </head>
 <body>
-  <header class="bar">
-    <div class="modes" role="tablist">
-      <button type="button" id="btn-pred" class="on">預測</button>
-      <button type="button" id="btn-actual">實際</button>
-    </div>
-    <p class="hint" id="hint"></p>
-    <button type="button" id="btn-sync" hidden>從 MLB 更新</button>
-  </header>
   <div id="poster"></div>
-  <div class="export-row">
-    <button type="button" id="btn-export">下載圖片</button>
-    <button type="button" id="btn-story">下載限動 9:16</button>
-    <label id="hits-toggle" hidden><input type="checkbox" id="chk-hits" checked> 海報標示猜中</label>
-  </div>
   <section id="editor"></section>
   <section id="schedule"></section>
-  <script src="/static/rules.js?v=14"></script>
-  <script src="/static/story.js?v=14"></script>
-  <script src="/static/app.js?v=14"></script>
+
+  <div id="fab">
+    <div id="fab-panel" role="dialog" aria-label="選單" hidden>
+      <div class="modes" role="tablist">
+        <button type="button" id="btn-pred" class="on">預測</button>
+        <button type="button" id="btn-actual">實際</button>
+      </div>
+      <p class="hint" id="hint"></p>
+      <button type="button" id="btn-sync" class="fab-wide" hidden>從 MLB 更新</button>
+      <div class="fab-group">
+        <span class="fab-label">跳到</span>
+        <button type="button" data-jump="poster">海報</button>
+        <button type="button" data-jump="editor">戰績</button>
+        <button type="button" data-jump="schedule">賽程</button>
+      </div>
+      <label class="fab-check"><input type="checkbox" id="chk-hide-poster"> 收起海報</label>
+      <label class="fab-check" id="hits-toggle" hidden><input type="checkbox" id="chk-hits" checked> 海報標示猜中</label>
+      <button type="button" id="btn-export" class="fab-wide gold">下載圖片</button>
+      <button type="button" id="btn-story" class="fab-wide">下載限動 9:16</button>
+    </div>
+    <button type="button" id="fab-toggle" aria-expanded="false" aria-controls="fab-panel" aria-label="開啟選單">
+      <span aria-hidden="true">☰</span>
+    </button>
+  </div>
+  <script src="/static/rules.js?v=15"></script>
+  <script src="/static/story.js?v=15"></script>
+  <script src="/static/schedule.js?v=15"></script>
+  <script src="/static/app.js?v=15"></script>
 </body>
 </html>

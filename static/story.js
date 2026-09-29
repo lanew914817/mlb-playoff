@@ -92,9 +92,9 @@ function storyCrop(ctx, plate, key, cx, cy, h, feather = 0) {
 }
 
 // Mirrored tiles of clean marble from the plate, darkened toward the top and bottom.
-function storyBackground(ctx, plate) {
+function storyBackground(ctx, plate, height = STORY_H) {
   const [mx, my, mw, mh] = S_CROP.marble;
-  for (let row = 0; row * mh < STORY_H; row++) {
+  for (let row = 0; row * mh < height; row++) {
     for (let col = 0; col * mw < STORY_W; col++) {
       ctx.save();
       ctx.translate(col * mw + (col % 2 ? mw : 0), row * mh + (row % 2 ? mh : 0));
@@ -103,14 +103,14 @@ function storyBackground(ctx, plate) {
       ctx.restore();
     }
   }
-  const v = ctx.createLinearGradient(0, 0, 0, STORY_H);
+  const v = ctx.createLinearGradient(0, 0, 0, height);
   v.addColorStop(0, "rgba(2,8,22,.75)");
   v.addColorStop(0.2, "rgba(2,8,22,.25)");
   v.addColorStop(0.5, "rgba(2,8,22,.1)");
   v.addColorStop(0.8, "rgba(2,8,22,.25)");
   v.addColorStop(1, "rgba(2,8,22,.8)");
   ctx.fillStyle = v;
-  ctx.fillRect(0, 0, STORY_W, STORY_H);
+  ctx.fillRect(0, 0, STORY_W, height);
 }
 
 function drawStory(ctx) {

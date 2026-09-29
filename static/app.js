@@ -5,6 +5,8 @@ let state = { wins: {}, games: [] };
 // Records of the shown bracket, and of the real games (for 猜中 marks); see rules.js.
 let bracket = {};
 let actualBracket = {};
+// Real MLB games (schedule and results), whatever mode is shown.
+let actualGames = [];
 const HITS_KEY = "mlb2026-show-hits";
 let showHits = true;
 try {
@@ -226,6 +228,15 @@ function cachedImg(src) {
   return imgCache[src];
 }
 const ready = (img) => img.complete && img.naturalWidth > 0;
+
+// Resolves once the image has loaded or failed (img.decode() can stall in background tabs).
+function whenLoaded(img) {
+  if (img.complete) return Promise.resolve();
+  return new Promise((res) => {
+    img.addEventListener("load", res, { once: true });
+    img.addEventListener("error", res, { once: true });
+  });
+}
 
 function spacedWidth(ctx, text, spacing) {
   const chars = [...text];
@@ -579,44 +590,152 @@ function renderEditor() {
   }
 }
 
+// Games picked for the schedule image (by gamePk); kept across re-renders.
+const picked = new Set();
+
+function scheduleGames() {
+  return actualGames
+    .filter((g) => g.gameDate)
+    .sort((a, b) => a.gameDate.localeCompare(b.gameDate) || a.gameNumber - b.gameNumber);
+}
+
+// Real records for the series names in the picker, whatever mode is shown.
+function realRecords() {
+  return mode === "actual" ? bracket : actualBracket;
+}
+
+function seriesTitle(s) {
+  const r = realRecords()[s.id];
+  return r ? `${s.zh} · ${zh(r.away)} vs ${zh(r.home)}` : s.zh;
+}
+
+function pickAll(games, on) {
+  for (const g of games) on ? picked.add(g.gamePk) : picked.delete(g.gamePk);
+  renderSchedule();
+}
+const allPicked = (games) => games.length > 0 && games.every((g) => picked.has(g.gamePk));
+
+// Image subtitle: one series, one day or one team when the pick is exactly that.
+function pickLabel(games) {
+  const all = scheduleGames();
+  if (games.length === all.length) return "全部賽程";
+  const same = (sub) => sub.length === games.length && allPicked(sub);
+  for (const s of series) {
+    if (same(all.filter((g) => g.seriesId === s.id))) return seriesTitle(s);
+  }
+  const days = new Set(games.map((g) => twDayKey(g.gameDate)));
+  if (days.size === 1 && same(all.filter((g) => twDayKey(g.gameDate) === [...days][0]))) return twDayLabel(games[0].gameDate);
+  for (const id of Object.keys(teams)) {
+    if (same(all.filter((g) => g.away === +id || g.home === +id))) return zh(+id);
+  }
+  return `自選 ${games.length} 場`;
+}
+
+async function shareSchedule() {
+  const games = scheduleGames().filter((g) => picked.has(g.gamePk));
+  if (!games.length) return;
+  await assetsReady();
+  await Promise.all(games.flatMap((g) => [g.away, g.home]).filter(real)
+    .map((id) => whenLoaded(cachedImg(logoSrc(id)))));
+  const canvases = scheduleCanvases(games, pickLabel(games));
+  const d = new Date();
+  for (let i = 0; i < canvases.length; i++) {
+    await download(canvases[i], exportName(d, "", canvases.length > 1 ? String(i + 1) : "", "賽程"));
+    if (i < canvases.length - 1) await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+function scheduleTools(all) {
+  const bar = el("div", "sched-tools");
+
+  const sel = el("select", "pick-series");
+  sel.setAttribute("aria-label", "依系列賽選取");
+  sel.appendChild(new Option("選系列賽…", ""));
+  for (const s of series) sel.appendChild(new Option(seriesTitle(s), s.id));
+  sel.onchange = () => {
+    if (sel.value) pickAll(all.filter((g) => g.seriesId === sel.value), true);
+  };
+
+  const chips = el("div", "team-chips");
+  for (const id of Object.keys(teams).map(Number)) {
+    const games = all.filter((g) => g.away === id || g.home === id);
+    const b = el("button", "chip" + (allPicked(games) ? " on" : ""));
+    b.type = "button";
+    b.title = `${zh(id)}的比賽`;
+    b.setAttribute("aria-pressed", String(allPicked(games)));
+    const img = el("img");
+    img.src = logoSrc(id);
+    img.alt = zh(id);
+    b.appendChild(img);
+    b.onclick = () => pickAll(games, !allPicked(games));
+    chips.appendChild(b);
+  }
+
+  const actions = el("div", "sched-actions");
+  const btn = (text, cls, fn) => {
+    const b = el("button", cls, text);
+    b.type = "button";
+    b.onclick = fn;
+    return b;
+  };
+  const n = all.filter((g) => picked.has(g.gamePk)).length;
+  const share = btn("分享圖片", "share", async () => {
+    share.disabled = true;
+    try {
+      await shareSchedule();
+    } catch (e) {
+      alert("輸出失敗：" + e);
+    } finally {
+      share.disabled = n === 0;
+    }
+  });
+  share.disabled = n === 0;
+  actions.append(
+    btn("全選", "", () => pickAll(all, true)),
+    btn("清除", "", () => pickAll(all, false)),
+    el("span", "count", `已選 ${n} 場`),
+    share,
+  );
+  bar.append(sel, chips, actions);
+  return bar;
+}
+
+function gameRow(g) {
+  const row = el("label", "g-row" + (picked.has(g.gamePk) ? " on" : ""));
+  const box = el("input");
+  box.type = "checkbox";
+  box.checked = picked.has(g.gamePk);
+  box.onchange = () => pickAll([g], box.checked);
+  const stage = gameStage(g);
+  const s = seriesBy(g.seriesId);
+  const w = stage === "final" ? gameScoreWinner(g) : null;
+  const team = (id) => el("span", "t" + (w == null ? "" : w === id ? " win" : " lose"), zh(id));
+  const match = el("span", "match");
+  match.append(team(g.away), el("span", "sc", stage ? `${g.awayScore} : ${g.homeScore}` : "@"), team(g.home));
+  const tag = stage === "live" ? "進行中" : !stage && g.ifNecessary ? "若需要" : "";
+  row.append(box, el("span", "time", twTime(g)), el("span", "ser", `${s ? s.zh : ""} G${g.gameNumber}`), match);
+  if (tag) row.appendChild(el("span", "tag", tag));
+  return row;
+}
+
 function renderSchedule() {
   const root = $("schedule");
-  root.innerHTML = "<h2>台灣時間賽程</h2>";
-  const groups = [];
-  const map = new Map();
-  const games = [...state.games].sort((a, b) => (a.gameDate || "").localeCompare(b.gameDate || ""));
-  for (const g of games) {
-    if (!g.gameDate) continue;
-    const key = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit",
-    }).format(new Date(g.gameDate));
-    if (!map.has(key)) {
-      const arr = [];
-      map.set(key, arr);
-      groups.push([key, arr]);
-    }
-    map.get(key).push(g);
-  }
-  for (const [key, arr] of groups) {
-    const day = document.createElement("div");
-    day.className = "day";
-    const d = new Date(arr[0].gameDate);
-    const head = new Intl.DateTimeFormat("zh-TW", {
-      timeZone: "Asia/Taipei", month: "numeric", day: "numeric", weekday: "short",
-    }).format(d);
-    day.innerHTML = `<h3>${head}</h3>`;
-    const ul = document.createElement("ul");
-    for (const g of arr) {
-      const li = document.createElement("li");
-      const tbd = g.startTimeTBD ? "時間待定" : new Intl.DateTimeFormat("zh-TW", {
-        timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false, hourCycle: "h23",
-      }).format(new Date(g.gameDate));
-      const extra = g.ifNecessary ? "（若需要）" : "";
-      const s = seriesBy(g.seriesId);
-      li.textContent = `${tbd}　${s ? s.zh : ""} G${g.gameNumber}　${zh(g.away)} @ ${zh(g.home)}${extra}`;
-      ul.appendChild(li);
-    }
-    day.appendChild(ul);
+  root.innerHTML = "";
+  root.appendChild(el("h2", "", "台灣時間賽程"));
+  root.appendChild(el("p", "sub", "勾選場次，或用系列賽、隊伍、日期快速選取，再按「分享圖片」。比分要按「從 MLB 更新」才會出現。"));
+  const all = scheduleGames();
+  root.appendChild(scheduleTools(all));
+  for (const d of groupByDay(all)) {
+    const day = el("div", "day");
+    const head = el("label", "day-head");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = allPicked(d.games);
+    box.indeterminate = !box.checked && d.games.some((g) => picked.has(g.gamePk));
+    box.onchange = () => pickAll(d.games, box.checked);
+    head.append(box, el("span", "", d.label));
+    day.appendChild(head);
+    for (const g of d.games) day.appendChild(gameRow(g));
     root.appendChild(day);
   }
 }
@@ -662,25 +781,28 @@ async function load(nextMode) {
   delete state.picks;
   if (!canEdit && mode === "prediction") state = { ...data.state, wins: readLocalWins() };
   actualBracket = {};
+  actualGames = state.games;
   if (mode === "prediction") {
     const act = await (await fetch("/api/state?mode=actual")).json();
     actualBracket = computeBracket(series, act.state, real);
+    actualGames = act.state.games || [];
   }
   render();
 }
 
-// mlb-2026-預測-20260929-1430.png / mlb-2026-預測-限動-20260929-1430.png (viewer's local time)
-function exportName(d, kind = "") {
+// mlb-2026-預測-20260929-1430.png, mlb-2026-預測-限動-…, mlb-2026-賽程-20260929-1430-2.png
+// (viewer's local time). `label` replaces the 預測/實際 part.
+function exportName(d, kind = "", part = "", label = mode === "actual" ? "實際" : "預測") {
   const p2 = (n) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
-  return `mlb-2026-${mode === "actual" ? "實際" : "預測"}${kind ? "-" + kind : ""}-${stamp}.png`;
+  return `mlb-2026-${label}${kind ? "-" + kind : ""}-${stamp}${part ? "-" + part : ""}.png`;
 }
 
 async function assetsReady() {
   await document.fonts.load(`700 20px ${SERIF}`).catch(() => {});
   await document.fonts.ready;
   const srcs = [BG_SRC, ...SLOTS.map(slotTeam).filter(real).map(logoSrc)];
-  await Promise.all(srcs.map((s) => cachedImg(s).decode().catch(() => {})));
+  await Promise.all(srcs.map((s) => whenLoaded(cachedImg(s))));
 }
 
 function download(canvas, name) {
@@ -748,6 +870,47 @@ $("btn-sync").onclick = async () => {
   } finally {
     $("btn-sync").disabled = false;
   }
+};
+
+// Floating menu: open/close, jump links, collapsible poster.
+const HIDE_POSTER_KEY = "mlb2026-hide-poster";
+
+function setFab(open) {
+  $("fab-panel").hidden = !open;
+  $("fab-toggle").setAttribute("aria-expanded", String(open));
+  $("fab-toggle").setAttribute("aria-label", open ? "關閉選單" : "開啟選單");
+}
+
+$("fab-toggle").onclick = () => setFab($("fab-panel").hidden);
+document.addEventListener("click", (e) => {
+  if (!$("fab-panel").hidden && !$("fab").contains(e.target)) setFab(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("fab-panel").hidden) {
+    setFab(false);
+    $("fab-toggle").focus();
+  }
+});
+for (const b of document.querySelectorAll("[data-jump]")) {
+  b.onclick = () => {
+    $(b.dataset.jump).scrollIntoView({ behavior: "smooth", block: "start" });
+    setFab(false);
+  };
+}
+
+function setPosterHidden(hidden) {
+  $("poster").hidden = hidden;
+  $("chk-hide-poster").checked = hidden;
+  if (!hidden) paintPoster();
+}
+try {
+  setPosterHidden(localStorage.getItem(HIDE_POSTER_KEY) === "1");
+} catch {}
+$("chk-hide-poster").onchange = () => {
+  setPosterHidden($("chk-hide-poster").checked);
+  try {
+    localStorage.setItem(HIDE_POSTER_KEY, $("chk-hide-poster").checked ? "1" : "0");
+  } catch {}
 };
 
 load("prediction");
